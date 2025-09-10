@@ -1,0 +1,22 @@
+{
+  "name": "utils",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "react-native": "src/index.tsx",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w -p tsconfig.json",
+    "clean": "rm -rf lib"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.73"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
+
+

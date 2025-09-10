@@ -2,18 +2,25 @@
   "name": "AwesomeProject",
   "version": "0.0.1",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "build:ui": "pnpm --filter ui run build",
+    "build:utils": "pnpm --filter utils run build"
   },
   "dependencies": {
     "react": "19.1.0",
     "react-native": "0.81.1",
     "@react-native/new-app-screen": "0.81.1",
-    "react-native-safe-area-context": "^5.5.2"
+    "react-native-safe-area-context": "^5.5.2",
+    "ui": "workspace:*",
+    "utils": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
