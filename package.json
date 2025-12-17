@@ -20,7 +20,8 @@
     "@react-native/new-app-screen": "0.81.1",
     "react-native-safe-area-context": "^5.5.2",
     "ui": "workspace:*",
-    "utils": "workspace:*"
+    "utils": "workspace:*",
+     "battery": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
