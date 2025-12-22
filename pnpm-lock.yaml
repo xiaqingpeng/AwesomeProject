@@ -11,15 +11,24 @@ importers:
       '@react-native/new-app-screen':
         specifier: 0.81.1
         version: 0.81.1(@types/react@19.1.12)(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
+      battery:
+        specifier: workspace:*
+        version: link:packages/battery
       react:
         specifier: 19.1.0
         version: 19.1.0
       react-native:
         specifier: 0.81.1
         version: 0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0)
+      react-native-pager-view:
+        specifier: ^8.0.0
+        version: 8.0.0(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
       react-native-safe-area-context:
         specifier: ^5.5.2
         version: 5.6.1(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
+      react-native-tab-view:
+        specifier: ^4.2.2
+        version: 4.2.2(react-native-pager-view@8.0.0(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0))(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
       ui:
         specifier: workspace:*
         version: link:packages/ui
@@ -80,6 +89,19 @@ importers:
         version: 19.1.0(react@19.1.0)
       typescript:
         specifier: ^5.8.3
+        version: 5.9.2
+
+  packages/battery:
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 19.1.0
+      react-native:
+        specifier: '>=0.73'
+        version: 0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0)
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
         version: 5.9.2
 
   packages/ui:
@@ -2939,11 +2961,24 @@ packages:
   react-is@19.1.1:
     resolution: {integrity: sha512-tr41fA15Vn8p4X9ntI+yCyeGSf1TlYaY5vlTZfQmeLBrFo3psOPX6HhTDnFNL9uj3EhP0KAQ80cugCl4b4BERA==}
 
+  react-native-pager-view@8.0.0:
+    resolution: {integrity: sha512-oAwlWT1lhTkIs9HhODnjNNl/owxzn9DP1MbP+az6OTUdgbmzA16Up83sBH8NRKwrH8rNm7iuWnX1qMqiiWOLhg==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   react-native-safe-area-context@5.6.1:
     resolution: {integrity: sha512-/wJE58HLEAkATzhhX1xSr+fostLsK8Q97EfpfMDKo8jlOc1QKESSX/FQrhk7HhQH/2uSaox4Y86sNaI02kteiA==}
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  react-native-tab-view@4.2.2:
+    resolution: {integrity: sha512-NXtrG6OchvbGjsvbySJGVocXxo4Y2vA17ph4rAaWtA2jh+AasD8OyikKBRg2SmllEfeQ+GEhcKe8kulHv8BhTg==}
+    peerDependencies:
+      react: '>= 18.2.0'
+      react-native: '*'
+      react-native-pager-view: '>= 6.0.0'
 
   react-native@0.81.1:
     resolution: {integrity: sha512-k2QJzWc/CUOwaakmD1SXa4uJaLcwB2g2V9BauNIjgtXYYAeyFjx9jlNz/+wAEcHLg9bH5mgMdeAwzvXqjjh9Hg==}
@@ -3389,6 +3424,11 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
+
+  use-latest-callback@0.2.6:
+    resolution: {integrity: sha512-FvRG9i1HSo0wagmX63Vrm8SnlUU3LMM3WyZkQ76RnslpBrX694AdG4A0zQBx2B3ZifFA0yv/BaEHGBnEax5rZg==}
+    peerDependencies:
+      react: '>=16.8'
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -7298,10 +7338,22 @@ snapshots:
 
   react-is@19.1.1: {}
 
+  react-native-pager-view@8.0.0(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+      react-native: 0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0)
+
   react-native-safe-area-context@5.6.1(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0):
     dependencies:
       react: 19.1.0
       react-native: 0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0)
+
+  react-native-tab-view@4.2.2(react-native-pager-view@8.0.0(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0))(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+      react-native: 0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0)
+      react-native-pager-view: 8.0.0(react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0))(react@19.1.0)
+      use-latest-callback: 0.2.6(react@19.1.0)
 
   react-native@0.81.1(@babel/core@7.28.4)(@react-native-community/cli@20.0.0(typescript@5.9.2))(@react-native/metro-config@0.81.1(@babel/core@7.28.4))(@types/react@19.1.12)(react@19.1.0):
     dependencies:
@@ -7827,6 +7879,10 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  use-latest-callback@0.2.6(react@19.1.0):
+    dependencies:
+      react: 19.1.0
 
   util-deprecate@1.0.2: {}
 

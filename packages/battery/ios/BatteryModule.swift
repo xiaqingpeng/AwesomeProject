@@ -2,7 +2,7 @@ import Foundation
 import React
 
 @objc(BatteryModule)
-class BatteryModule: NSObject {
+class BatteryModule: RCTEventEmitter {
   private var isMonitoring = false
   
   @objc
@@ -106,7 +106,11 @@ class BatteryModule: NSObject {
   }
   
   @objc
-  static func requiresMainQueueSetup() -> Bool {
+  override static func requiresMainQueueSetup() -> Bool {
     return false
+  }
+
+  override func supportedEvents() -> [String] {
+    return ["BatteryStatus"]
   }
 }

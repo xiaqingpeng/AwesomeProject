@@ -1748,37 +1748,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-safe-area-context (5.6.1):
-    - boost
-    - DoubleConversion
-    - fast_float
-    - fmt
-    - glog
-    - hermes-engine
-    - RCT-Folly
-    - RCT-Folly/Fabric
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - react-native-safe-area-context/common (= 5.6.1)
-    - react-native-safe-area-context/fabric (= 5.6.1)
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - SocketRocket
-    - Yoga
-  - react-native-safe-area-context/common (5.6.1):
+  - react-native-pager-view (8.0.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -1805,8 +1775,67 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - SocketRocket
+    - SwiftUIIntrospect (~> 1.0)
     - Yoga
-  - react-native-safe-area-context/fabric (5.6.1):
+  - react-native-safe-area-context (5.6.2):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - react-native-safe-area-context/common (= 5.6.2)
+    - react-native-safe-area-context/fabric (= 5.6.2)
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
+  - react-native-safe-area-context/common (5.6.2):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
+  - react-native-safe-area-context/fabric (5.6.2):
     - boost
     - DoubleConversion
     - fast_float
@@ -2341,6 +2370,7 @@ PODS:
     - React-utils (= 0.81.1)
     - SocketRocket
   - SocketRocket (0.7.1)
+  - SwiftUIIntrospect (1.3.0)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2385,6 +2415,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-pager-view (from `../node_modules/react-native-pager-view`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native/ReactCommon/oscompat`)
@@ -2422,6 +2453,7 @@ DEPENDENCIES:
 SPEC REPOS:
   trunk:
     - SocketRocket
+    - SwiftUIIntrospect
 
 EXTERNAL SOURCES:
   boost:
@@ -2505,6 +2537,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
+  react-native-pager-view:
+    :path: "../node_modules/react-native-pager-view"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   React-NativeModulesApple:
@@ -2611,7 +2645,8 @@ SPEC CHECKSUMS:
   React-logger: 7aef4d74123e5e3d267e5af1fbf5135b5a0d8381
   React-Mapbuffer: 91e0eab42a6ae7f3e34091a126d70fc53bd3823e
   React-microtasksnativemodule: 1ead4fe154df3b1ba34b5a9e35ef3c4bdfa72ccb
-  react-native-safe-area-context: c6e2edd1c1da07bdce287fa9d9e60c5f7b514616
+  react-native-pager-view: d7d2aa47f54343bf55fdcee3973503dd27c2bd37
+  react-native-safe-area-context: c00143b4823773bba23f2f19f85663ae89ceb460
   React-NativeModulesApple: eff2eba56030eb0d107b1642b8f853bc36a833ac
   React-oscompat: b12c633e9c00f1f99467b1e0e0b8038895dae436
   React-perflogger: 58d12c4e5df1403030c97b9c621375c312cca454
@@ -2640,11 +2675,12 @@ SPEC CHECKSUMS:
   React-timing: 97ada2c47b4c5932e7f773c7d239c52b90d6ca68
   React-utils: f0949d247a46b4c09f03e5a3cb1167602d0b729a
   ReactAppDependencyProvider: 3eb9096cb139eb433965693bbe541d96eb3d3ec9
-  ReactCodegen: 421a39fd0a977cec19d66a38af5bc94c8232bbfa
+  ReactCodegen: 4d203eddf6f977caa324640a20f92e70408d648b
   ReactCommon: ce5d4226dfaf9d5dacbef57b4528819e39d3a120
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  SwiftUIIntrospect: fee9aa07293ee280373a591e1824e8ddc869ba5d
   Yoga: 11c9686a21e2cd82a094a723649d9f4507200fb0
 
-PODFILE CHECKSUM: 9976e724cb606c0555e764f5405cc69ad14f868c
+PODFILE CHECKSUM: e58ab4706b552ce9d453363e66a8b2ed6bd19bf1
 
 COCOAPODS: 1.15.2
