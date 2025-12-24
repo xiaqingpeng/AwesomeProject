@@ -353,17 +353,28 @@ jobs:
         bundler-cache: true
         working-directory: ./fastlane
     
-    - name: Fix Bundler platform mismatch (关键修复步骤)
+    - name: Fix Bundler platform mismatch + Install CocoaPods (关键修复)
       working-directory: ./fastlane
       run: |
         # 添加缺失的平台到 Gemfile.lock
         bundle lock --add-platform arm64-darwin-24
         # 重新安装依赖以适配新平台
         bundle install
-        # 更新 fastlane 到最新版本（解决版本兼容问题）
+        # 安装 CocoaPods 到 fastlane 的 Bundler 环境（核心修复）
+        bundle add cocoapods -v 1.15.2
+        # 更新 fastlane 到最新版本
         bundle update fastlane
-        # 全局安装 CocoaPods 作为兜底方案
-        gem install cocoapods -v 1.15.2 --no-document
+        # 全局安装 CocoaPods 作为终极兜底
+        sudo gem install cocoapods -v 1.15.2 --no-document
+        # 验证 CocoaPods 安装路径
+        echo "=== CocoaPods 安装验证 ==="
+        which pod
+        pod --version
+        /usr/local/bin/pod --version
+        # 将全局 gem 路径加入环境变量
+        echo "GEM_HOME=$(gem environment home)" >> $GITHUB_ENV
+        echo "$(gem environment home)/bin" >> $GITHUB_PATH
+        echo "/usr/local/bin" >> $GITHUB_PATH
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2
@@ -386,24 +397,28 @@ jobs:
         rm -rf Pods Podfile.lock
         pod cache clean --all || true
     
-    - name: Install CocoaPods dependencies (修复版本)
+    - name: Pre-install CocoaPods dependencies (CI 层面)
       working-directory: ./ios
       env:
-        # Fix for pnpm workspace + CocoaPods compatibility
-        COCOAPODS_DISABLE_STATS: true
-        # 指定 Bundler 从 fastlane 目录加载 Gemfile
-        BUNDLE_GEMFILE: ../fastlane/Gemfile
+        # 强制使用全局 Gemfile 上下文
+        BUNDLE_GEMFILE: /dev/null
       run: |
-        # 使用绝对路径确保 Node 模块可被找到
+        # 使用绝对路径执行 pod，避开 Bundler 隔离
         export NODE_PATH=$(pwd)/../node_modules
-        # 优先使用 fastlane 目录的 Bundler 执行 pod
-        bundle exec pod install --repo-update || \
-        # 兜底方案：直接使用全局安装的 pod
-        pod install --repo-update
+        /usr/local/bin/pod install --repo-update
     
     - name: Build iOS app
       working-directory: ./fastlane
-      run: bundle exec fastlane ios build
+      env:
+        # 确保 fastlane 能找到全局 pod
+        PATH: "/usr/local/bin:${PATH}"
+        BUNDLE_GEMFILE: /dev/null
+      run: |
+        # 验证 pod 路径
+        which pod
+        pod --version
+        # 执行 fastlane
+        bundle exec fastlane ios build
     
     - name: Check Generated iOS App
       run: |
