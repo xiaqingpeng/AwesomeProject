@@ -7,37 +7,6 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  # test:
-  #   runs-on: macos-latest
-    
-  #   steps:
-  #   - uses: actions/checkout@v3
-    
-  #   - name: Set up Ruby
-  #     uses: ruby/setup-ruby@v1
-  #     with:
-  #       ruby-version: '3.1.5'
-  #       bundler-cache: true
-  #       working-directory: ./fastlane
-    
-  #   - name: Install pnpm
-  #     uses: pnpm/action-setup@v2
-  #     with:
-  #       version: 8
-    
-  #   - name: Set up Node.js
-  #     uses: actions/setup-node@v4
-  #     with:
-  #       node-version: '20'
-  #       cache: 'pnpm'
-    
-  #   - name: Install dependencies
-  #     run: pnpm install
-    
-  #   - name: Run React Native tests
-  #     working-directory: ./fastlane
-  #     run: bundle exec fastlane react_native_test
-
   build-android:
     runs-on: macos-latest
     
@@ -333,12 +302,12 @@ jobs:
 
     - name: Create SSH config
       run: |
-        echo "Host upload-server"
-        echo "  HostName ${{ secrets.SERVER_HOST }}"
-        echo "  User ${{ secrets.SERVER_USERNAME }}"
-        echo "  PasswordAuthentication yes"
-        echo "  StrictHostKeyChecking no"
-        echo "  UserKnownHostsFile ~/.ssh/known_hosts" > ~/.ssh/config
+        echo "Host upload-server" > ~/.ssh/config
+        echo "  HostName ${{ secrets.SERVER_HOST }}" >> ~/.ssh/config
+        echo "  User ${{ secrets.SERVER_USERNAME }}" >> ~/.ssh/config
+        echo "  PasswordAuthentication yes" >> ~/.ssh/config
+        echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+        echo "  UserKnownHostsFile ~/.ssh/known_hosts" >> ~/.ssh/config
         chmod 600 ~/.ssh/config
 
     - name: Upload APK and HTML to Server (Optimized)
@@ -372,8 +341,6 @@ jobs:
         ls -la /var/www/html
         EOF
 
-
-
   build-ios:
     runs-on: macos-latest
     
@@ -386,6 +353,17 @@ jobs:
         ruby-version: '3.1.5'
         bundler-cache: true
         working-directory: ./fastlane
+    
+    # ========== 新增：修复 Bundler 平台不匹配问题 ==========
+    - name: Fix Bundler platform mismatch (关键修复步骤)
+      working-directory: ./fastlane
+      run: |
+        # 添加缺失的平台到 Gemfile.lock
+        bundle lock --add-platform arm64-darwin-24
+        # 重新安装依赖以适配新平台
+        bundle install
+        # 更新 fastlane 到最新版本（解决版本兼容问题）
+        bundle update fastlane
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2
@@ -414,9 +392,9 @@ jobs:
         # Fix for pnpm workspace + CocoaPods compatibility
         COCOAPODS_DISABLE_STATS: true
       run: |
-        # Use absolute paths to avoid null byte issues
+        # 使用 bundle exec 执行 pod，避免 Ruby 环境冲突
         export NODE_PATH=$(pwd)/../node_modules
-        pod install --repo-update
+        bundle exec pod install --repo-update
     
     - name: Build iOS app
       working-directory: ./fastlane
@@ -485,12 +463,12 @@ jobs:
 
     - name: Create SSH config
       run: |
-        echo "Host upload-server"
-        echo "  HostName ${{ secrets.SERVER_HOST }}"
-        echo "  User ${{ secrets.SERVER_USERNAME }}"
-        echo "  PasswordAuthentication yes"
-        echo "  StrictHostKeyChecking no"
-        echo "  UserKnownHostsFile ~/.ssh/known_hosts" > ~/.ssh/config
+        echo "Host upload-server" > ~/.ssh/config
+        echo "  HostName ${{ secrets.SERVER_HOST }}" >> ~/.ssh/config
+        echo "  User ${{ secrets.SERVER_USERNAME }}" >> ~/.ssh/config
+        echo "  PasswordAuthentication yes" >> ~/.ssh/config
+        echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+        echo "  UserKnownHostsFile ~/.ssh/known_hosts" >> ~/.ssh/config
         chmod 600 ~/.ssh/config
 
     - name: Upload iOS App to Server (Optimized)
@@ -516,4 +494,3 @@ jobs:
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
         EOF
-
