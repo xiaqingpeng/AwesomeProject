@@ -340,10 +340,10 @@ jobs:
         ls -la /var/www/html
         EOF
 
-  build-ios:
+  build-ios:  # 修复：与 build-android 同级缩进
     runs-on: macos-latest
     
-    steps:
+    steps:  # 修复：正确缩进
     - uses: actions/checkout@v3
     
     - name: Set up Ruby
@@ -352,32 +352,53 @@ jobs:
         ruby-version: '3.1.5'
         bundler-cache: true
         working-directory: ./fastlane
+      # 强制使用指定 Ruby 版本，禁用系统 Ruby
+      env:
+        BUNDLE_FORCE_RUBY_PLATFORM: true
     
     - name: Fix Bundler platform mismatch + Install CocoaPods (关键修复)
       working-directory: ./fastlane
       run: |
-        # 确保基础命令可用
-        export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+        # 1. 强制加载 Ruby 3.1.5 环境（核心修复）
+        source ~/.bash_profile || true
+        source ~/.profile || true
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
+        export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
+        export GEM_PATH="$GEM_HOME"
         
-        # 添加缺失的平台到 Gemfile.lock
-        bundle lock --add-platform arm64-darwin-24
-        # 重新安装依赖以适配新平台
-        bundle install
-        # 安装 CocoaPods 到 fastlane 的 Bundler 环境（核心修复）
-        bundle add cocoapods -v 1.15.2
-        # 更新 fastlane 到最新版本
-        bundle update fastlane
-        # 全局安装 CocoaPods 作为终极兜底
-        sudo gem install cocoapods -v 1.15.2 --no-document
+        # 验证 Ruby 版本
+        echo "=== Ruby 环境验证 ==="
+        ruby --version
+        gem --version
+        which ruby
+        which gem
         
-        # 验证 CocoaPods 安装
+        # 2. 安装匹配版本的 Bundler
+        echo "=== 安装匹配版本的 Bundler ==="
+        gem install bundler:2.3.27 --no-document
+        bundler --version
+        
+        # 3. 重新安装依赖并添加 CocoaPods
+        echo "=== 安装项目依赖 ==="
+        bundle _2.3.27_ lock --add-platform arm64-darwin-24
+        bundle _2.3.27_ install
+        
+        # 4. 添加 CocoaPods 到项目依赖
+        echo "=== 添加 CocoaPods 依赖 ==="
+        bundle _2.3.27_ add cocoapods -v 1.15.2
+        bundle _2.3.27_ update fastlane
+        
+        # 5. 全局安装 CocoaPods兜底
+        echo "=== 全局安装 CocoaPods ==="
+        gem install cocoapods -v 1.15.2 --no-document
+        
+        # 6. 验证 CocoaPods 安装
         echo "=== CocoaPods 安装验证 ==="
         if command -v pod >/dev/null; then
           echo "pod command found at: $(command -v pod)"
           pod --version
         else
-          echo "pod command not found, trying global gem path"
-          export PATH="$(gem environment home)/bin:$PATH"
+          export PATH="$GEM_HOME/bin:$PATH"
           if command -v pod >/dev/null; then
             echo "pod command found at: $(command -v pod)"
             pod --version
@@ -387,9 +408,10 @@ jobs:
           fi
         fi
         
-        # 设置环境变量
-        echo "GEM_HOME=$(gem environment home)" >> $GITHUB_ENV
-        echo "$(gem environment home)/bin" >> $GITHUB_PATH
+        # 7. 设置环境变量供后续步骤使用
+        echo "GEM_HOME=$GEM_HOME" >> $GITHUB_ENV
+        echo "$GEM_HOME/bin" >> $GITHUB_PATH
+        echo "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin" >> $GITHUB_PATH
         echo "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" >> $GITHUB_PATH
     
     - name: Install pnpm
@@ -405,13 +427,13 @@ jobs:
     
     - name: Install dependencies
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         pnpm install
     
     - name: Clean CocoaPods cache
       working-directory: ./ios
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:$PATH"
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         # Clean CocoaPods cache to avoid null byte errors
         rm -rf Pods Podfile.lock
         if command -v pod >/dev/null; then
@@ -424,7 +446,7 @@ jobs:
         # 强制使用全局 Gemfile 上下文
         BUNDLE_GEMFILE: /dev/null
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:$PATH"
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         # 使用绝对路径执行 pod，避开 Bundler 隔离
         export NODE_PATH=$(pwd)/../node_modules
         if command -v pod >/dev/null; then
@@ -438,10 +460,13 @@ jobs:
       working-directory: ./fastlane
       env:
         # 确保 fastlane 能找到全局 pod
-        PATH: "/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:/usr/bin:/bin:$PATH"
+        PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
         BUNDLE_GEMFILE: /dev/null
       run: |
-        # 执行 fastlane（移除不必要的验证命令）
+        # 验证 Ruby 和 Bundler 版本
+        ruby --version
+        bundle --version
+        # 执行 fastlane
         bundle exec fastlane ios build
     
     - name: Check Generated iOS App
