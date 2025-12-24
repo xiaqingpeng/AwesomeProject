@@ -1,9 +1,25 @@
 # Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
+# Fix for pnpm workspace: use absolute path to avoid null byte errors
+node_modules_path = File.expand_path('../node_modules', __dir__)
+react_native_pods_path = Pod::Executable.execute_command('node', ['-p',
+  "require.resolve(
+    'react-native/scripts/react_native_pods.rb',
     {paths: [process.argv[1]]},
-  )', __dir__]).strip
+  )", node_modules_path]).strip
+
+# Ensure path doesn't contain null bytes and handle pnpm symlinks
+react_native_pods_path = react_native_pods_path.gsub(/\0/, '').strip
+if File.exist?(react_native_pods_path)
+  require react_native_pods_path
+else
+  # Fallback: try direct path
+  fallback_path = File.expand_path('../node_modules/react-native/scripts/react_native_pods.rb', __dir__)
+  if File.exist?(fallback_path)
+    require fallback_path
+  else
+    raise "Could not find react_native_pods.rb"
+  end
+end
 
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
@@ -15,23 +31,35 @@ if linkage != nil
 end
 
 target 'AwesomeProject' do
+  # Set NODE_PATH to help pnpm workspace resolve modules correctly
+  project_root = File.expand_path('..', __dir__)
+  node_modules_path = File.join(project_root, 'node_modules')
+  ENV['NODE_PATH'] = node_modules_path
+  
   config = use_native_modules!
+  
+  # Handle nil config (for pnpm workspace compatibility)
+  react_native_path = if config && config[:reactNativePath]
+    config[:reactNativePath]
+  else
+    File.expand_path('../node_modules/react-native', __dir__)
+  end
 
   use_react_native!(
-    :path => config[:reactNativePath],
+    :path => react_native_path,
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  # Add react-native-pager-view manually linked
-  pod 'react-native-pager-view', :path => '../node_modules/react-native-pager-view'
+  # react-native-pager-view is automatically linked by use_native_modules!
+  # No need to manually add it here
 
   post_install do |installer|
     # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false,
+      react_native_path,
+      :mac_catalyst_enabled => false
       # :ccache_enabled => true
     )
   end

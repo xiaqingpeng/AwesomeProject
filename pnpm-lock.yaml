@@ -32,9 +32,6 @@ importers:
       ui:
         specifier: workspace:*
         version: link:packages/ui
-      utils:
-        specifier: workspace:*
-        version: link:packages/utils
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2

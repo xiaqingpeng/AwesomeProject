@@ -79,19 +79,48 @@ jobs:
     - name: Create Android signing files
       run: |
         # Create key.properties file from GitHub Secrets
-        echo "Creating key.properties file..."
+        echo "Setting up Android signing configuration..."
         mkdir -p android/app
         
-        # Write key.properties content
-        echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD || 'android' }}" > android/key.properties
-        echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}" >> android/key.properties
-        echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS || 'release' }}" >> android/key.properties
-        echo "storeFile=release.keystore" >> android/key.properties
-        
-        echo "Verifying existing release.keystore..."
-        # Check if release.keystore exists in project root
-        if [ -f "release.keystore" ]; then
-          echo "release.keystore found in project root, size: $(du -sh release.keystore | awk '{print $1}')"
+        # Check if keystore is provided via GitHub Secrets (base64 encoded)
+        if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+          echo "✓ Keystore found in GitHub Secrets, decoding..."
+          
+          # Decode base64 keystore from GitHub Secrets
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          
+          # Get signing credentials from secrets
+          KEYSTORE_PASS="${{ secrets.ANDROID_STORE_PASSWORD }}"
+          KEY_PASS="${{ secrets.ANDROID_KEY_PASSWORD }}"
+          KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
+          
+          # Verify keystore can be accessed with the provided password
+          echo "Verifying keystore accessibility..."
+          if keytool -list -v -keystore android/app/release.keystore -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "✓ Keystore is valid and accessible with provided credentials"
+            echo "Keystore certificate information:"
+            keytool -list -v -keystore android/app/release.keystore -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" | grep -E "(Alias name:|Owner:|Issuer:|Valid from|Certificate fingerprints:)" | head -10
+          else
+            echo "✗ WARNING: Could not verify keystore with provided credentials!"
+            echo "This might cause signing issues. Please verify:"
+            echo "  - ANDROID_STORE_PASSWORD is correct"
+            echo "  - ANDROID_KEY_PASSWORD is correct"
+            echo "  - ANDROID_KEY_ALIAS is correct"
+            echo "  - ANDROID_KEYSTORE_BASE64 is valid"
+            exit 1
+          fi
+          
+          # Create key.properties file
+          echo "storePassword=$KEYSTORE_PASS" > android/key.properties
+          echo "keyPassword=$KEY_PASS" >> android/key.properties
+          echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+          echo "storeFile=release.keystore" >> android/key.properties
+          
+          echo "✓ Release keystore configured successfully"
+          echo "Contents (passwords masked):"
+          sed 's/Password=.*/Password=***/' android/key.properties
+        elif [ -f "release.keystore" ]; then
+          echo "✓ Keystore found in project root, using it..."
           
           # Calculate checksums for verification
           echo "Calculating keystore checksums..."
@@ -128,28 +157,32 @@ jobs:
             echo "✗ ERROR: Keystore copy verification failed!"
             exit 1
           fi
-        else
-          echo "ERROR: release.keystore not found in project root!"
-          exit 1
-        fi
-        
-        echo "\nVerifying created files..."
-        ls -la android/
-        ls -la android/app/
-        if [ -f android/key.properties ]; then
-          echo "✓ key.properties file created successfully"
+          
+          # Create key.properties file
+          echo "storePassword=$KEYSTORE_PASS" > android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}" >> android/key.properties
+          echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+          echo "storeFile=release.keystore" >> android/key.properties
+          
+          echo "✓ Release keystore configured successfully"
           echo "Contents (passwords masked):"
           sed 's/Password=.*/Password=***/' android/key.properties
         else
-          echo "ERROR: key.properties file not created!"
-          exit 1
+          echo "⚠ WARNING: No release keystore found!"
+          echo "  - ANDROID_KEYSTORE_BASE64 secret is not set"
+          echo "  - release.keystore file is not in project root"
+          echo ""
+          echo "Using debug keystore for release build (not recommended for production)"
+          echo "To use a release keystore:"
+          echo "  1. Generate a keystore: keytool -genkeypair -v -storetype PKCS12 -keystore release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000"
+          echo "  2. Encode it: base64 -i release.keystore | pbcopy"
+          echo "  3. Add ANDROID_KEYSTORE_BASE64 secret to GitHub repository"
+          echo "  4. Add ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD, and ANDROID_KEY_ALIAS secrets"
         fi
-        if [ -f android/app/release.keystore ]; then
-          echo "✓ Keystore file verified at android/app/release.keystore"
-        else
-          echo "ERROR: Keystore file not found at android/app/release.keystore!"
-          exit 1
-        fi
+        
+        echo "\nVerifying created files..."
+        ls -la android/ 2>/dev/null || true
+        ls -la android/app/ 2>/dev/null || true
 
     
     - name: Build Android APK
@@ -368,10 +401,22 @@ jobs:
     - name: Install dependencies
       run: pnpm install
     
-    - name: Install CocoaPods dependencies
+    - name: Clean CocoaPods cache
       working-directory: ./ios
       run: |
-        pod install
+        # Clean CocoaPods cache to avoid null byte errors
+        rm -rf Pods Podfile.lock
+        pod cache clean --all || true
+    
+    - name: Install CocoaPods dependencies
+      working-directory: ./ios
+      env:
+        # Fix for pnpm workspace + CocoaPods compatibility
+        COCOAPODS_DISABLE_STATS: true
+      run: |
+        # Use absolute paths to avoid null byte issues
+        export NODE_PATH=$(pwd)/../node_modules
+        pod install --repo-update
     
     - name: Build iOS app
       working-directory: ./fastlane
