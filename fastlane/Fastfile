@@ -1,0 +1,105 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+# Global lanes for React Native operations
+desc "Run React Native tests"
+lane :react_native_test do
+  project_root = File.expand_path('..', __dir__)
+  puts "Running React Native tests..."
+  sh("cd #{project_root} && npm test")
+end
+
+desc "Lint React Native code"
+lane :react_native_lint do
+  project_root = File.expand_path('..', __dir__)
+  puts "Linting React Native code..."
+  sh("cd #{project_root} && npm run lint")
+end
+
+desc "Build both iOS and Android"
+lane :react_native_build_all do
+  puts "Building iOS and Android apps..."
+  ios_build
+  android_build
+end
+
+desc "Run full CI pipeline"
+lane :react_native_ci do
+  react_native_lint
+  react_native_test
+  react_native_build_all
+end
+
+platform :ios do
+  desc "Run tests for iOS"
+  lane :test do
+    puts "Running iOS tests..."
+    react_native_test
+  end
+
+  desc "Build iOS app"
+  lane :build do
+    project_root = File.expand_path('..', __dir__)
+    puts "Building iOS app..."
+    # Build React Native iOS app using xcodebuild
+    # This will automatically build the JS bundle and native app
+    sh("cd #{project_root}/ios && xcodebuild -workspace AwesomeProject.xcworkspace -scheme AwesomeProject -configuration Release -destination 'generic/platform=iOS' -archivePath #{project_root}/ios/build/AwesomeProject.xcarchive archive CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO")
+    # Extract the app from archive to expected location
+    sh("mkdir -p #{project_root}/ios/build/Build/Products/Release-iphoneos")
+    sh("cp -r #{project_root}/ios/build/AwesomeProject.xcarchive/Products/Applications/AwesomeProject.app #{project_root}/ios/build/Build/Products/Release-iphoneos/ 2>/dev/null || echo 'App will be in archive location'")
+  end
+  
+  # Alias for global access
+  lane :ios_build do
+    build
+  end
+
+  desc "Build and archive iOS app"
+  lane :archive do
+    build
+    # Add archive and export steps here as needed
+    # gym(scheme: "AwesomeProject", export_method: "app-store")
+  end
+end
+
+platform :android do
+  desc "Run tests for Android"
+  lane :test do
+    puts "Running Android tests..."
+    react_native_test
+  end
+
+  desc "Build Android app"
+  lane :build do
+    project_root = File.expand_path('..', __dir__)
+    puts "Building Android app with optimized settings..."
+    # Build React Native Android APK using Gradle
+    sh("cd #{project_root}/android && ./gradlew assembleRelease")
+  end
+  
+  # Alias for global access
+  lane :android_build do
+    build
+  end
+
+  desc "Build Android App Bundle"
+  lane :build_bundle do
+    project_root = File.expand_path('..', __dir__)
+    puts "Building Android App Bundle..."
+    sh("cd #{project_root}/android && ./gradlew bundleRelease")
+  end
+end

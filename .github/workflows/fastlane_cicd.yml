@@ -1,0 +1,474 @@
+name: Fastlane CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # test:
+  #   runs-on: macos-latest
+    
+  #   steps:
+  #   - uses: actions/checkout@v3
+    
+  #   - name: Set up Ruby
+  #     uses: ruby/setup-ruby@v1
+  #     with:
+  #       ruby-version: '3.1.5'
+  #       bundler-cache: true
+  #       working-directory: ./fastlane
+    
+  #   - name: Set up Node.js
+  #     uses: actions/setup-node@v4
+  #     with:
+  #       node-version: '20'
+  #       cache: 'pnpm'
+    
+  #   - name: Install pnpm
+  #     uses: pnpm/action-setup@v2
+  #     with:
+  #       version: 8
+    
+  #   - name: Install dependencies
+  #     run: pnpm install
+    
+  #   - name: Run React Native tests
+  #     working-directory: ./fastlane
+  #     run: bundle exec fastlane react_native_test
+
+  build-android:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.1.5'
+        bundler-cache: true
+        working-directory: ./fastlane
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+    
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          android/.gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties', '**/build.gradle', '**/package-lock.json', '**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Create Android signing files
+      run: |
+        # Create key.properties file from GitHub Secrets
+        echo "Creating key.properties file..."
+        mkdir -p android/app
+        
+        # Write key.properties content
+        echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD || 'android' }}" > android/key.properties
+        echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}" >> android/key.properties
+        echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS || 'release' }}" >> android/key.properties
+        echo "storeFile=release.keystore" >> android/key.properties
+        
+        echo "Verifying existing release.keystore..."
+        # Check if release.keystore exists in project root
+        if [ -f "release.keystore" ]; then
+          echo "release.keystore found in project root, size: $(du -sh release.keystore | awk '{print $1}')"
+          
+          # Calculate checksums for verification
+          echo "Calculating keystore checksums..."
+          KEYSTORE_MD5=$(md5 -q release.keystore 2>/dev/null || md5sum release.keystore | awk '{print $1}')
+          KEYSTORE_SHA256=$(shasum -a 256 release.keystore | awk '{print $1}')
+          echo "Keystore MD5: $KEYSTORE_MD5"
+          echo "Keystore SHA256: $KEYSTORE_SHA256"
+          
+          # Verify keystore can be accessed with the provided password
+          KEYSTORE_PASS="${{ secrets.ANDROID_STORE_PASSWORD || 'android' }}"
+          KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS || 'release' }}"
+          echo "Verifying keystore accessibility..."
+          if keytool -list -v -keystore release.keystore -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "✓ Keystore is valid and accessible with provided credentials"
+            echo "Keystore certificate information:"
+            keytool -list -v -keystore release.keystore -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS" | grep -E "(Alias name:|Owner:|Issuer:|Valid from|Certificate fingerprints:)" | head -10
+          else
+            echo "✗ WARNING: Could not verify keystore with provided credentials!"
+            echo "This might cause signing issues. Please verify:"
+            echo "  - ANDROID_STORE_PASSWORD is correct"
+            echo "  - ANDROID_KEY_ALIAS is correct"
+            echo "  - Keystore file is valid"
+          fi
+          
+          # Copy keystore to android/app/ where Gradle expects it
+          cp release.keystore android/app/release.keystore
+          echo "Keystore copied to android/app/release.keystore"
+          
+          # Verify the copied file
+          COPIED_MD5=$(md5 -q android/app/release.keystore 2>/dev/null || md5sum android/app/release.keystore | awk '{print $1}')
+          if [ "$KEYSTORE_MD5" = "$COPIED_MD5" ]; then
+            echo "✓ Keystore copy verified (MD5 match)"
+          else
+            echo "✗ ERROR: Keystore copy verification failed!"
+            exit 1
+          fi
+        else
+          echo "ERROR: release.keystore not found in project root!"
+          exit 1
+        fi
+        
+        echo "\nVerifying created files..."
+        ls -la android/
+        ls -la android/app/
+        if [ -f android/key.properties ]; then
+          echo "✓ key.properties file created successfully"
+          echo "Contents (passwords masked):"
+          sed 's/Password=.*/Password=***/' android/key.properties
+        else
+          echo "ERROR: key.properties file not created!"
+          exit 1
+        fi
+        if [ -f android/app/release.keystore ]; then
+          echo "✓ Keystore file verified at android/app/release.keystore"
+        else
+          echo "ERROR: Keystore file not found at android/app/release.keystore!"
+          exit 1
+        fi
+
+    
+    - name: Build Android APK
+      working-directory: ./fastlane
+      env:
+        GRADLE_OPTS: "-Dorg.gradle.daemon=true -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configureondemand=true"
+      run: |
+        # Enable Gradle build cache and parallel execution
+        bundle exec fastlane android build
+    
+    - name: Check Generated APK File
+      run: |
+        echo "=== Looking for generated APK files ==="
+        find . -name "*.apk" -type f | grep -v "build-cache" | sort
+        
+        echo "\n=== Checking android/app/build/outputs/apk/release directory ==="
+        ls -la android/app/build/outputs/apk/release 2>/dev/null || echo "Release directory not found"
+        
+        echo "=== Verifying APK file exists ==="
+        # Check for React Native APK output
+        if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+          echo "Release APK found: app-release.apk"
+          APK_FILE="android/app/build/outputs/apk/release/app-release.apk"
+          echo "APK file size: $(ls -lh $APK_FILE | awk '{print $5}')"
+          cp $APK_FILE ./app-release.apk
+          echo "APK file copied to root directory: $(ls -lh app-release.apk)"
+        else
+          echo "ERROR: APK file not found!"
+          echo "Available APK files:"
+          find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK files found"
+          exit 1
+        fi
+        
+        echo "\n=== APK Size Analysis ==="
+        echo "Final APK size: $(du -h app-release.apk | awk '{print $1}')"
+        echo "APK size in bytes: $(stat -f%z app-release.apk 2>/dev/null || stat -c%s app-release.apk)"
+
+    - name: Verify APK Signature
+      run: |
+        echo "=== Verifying APK Signature ==="
+        
+        # Determine which APK file to verify
+        if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+          APK_TO_VERIFY="android/app/build/outputs/apk/release/app-release.apk"
+        else
+          echo "ERROR: No APK file found for verification"
+          exit 1
+        fi
+        
+        # Check if jarsigner is available
+        if ! command -v jarsigner &> /dev/null; then
+          echo "WARNING: jarsigner not found, skipping signature verification"
+          exit 0
+        fi
+        
+        # Verify APK signature
+        echo "Checking APK signature for: $APK_TO_VERIFY"
+        if jarsigner -verify -verbose -certs "$APK_TO_VERIFY" > apk_signature_info.txt 2>&1; then
+          echo "✓ APK signature is valid"
+          echo "\n=== APK Signature Details ==="
+          cat apk_signature_info.txt | grep -A 20 "Certificate chain" || cat apk_signature_info.txt
+          
+          # Extract certificate information
+          echo "\n=== Certificate Fingerprints ==="
+          unzip -q -o "$APK_TO_VERIFY" -d /tmp/apk_extract 2>/dev/null || true
+          if [ -f /tmp/apk_extract/META-INF/*.RSA ] || [ -f /tmp/apk_extract/META-INF/*.DSA ] || [ -f /tmp/apk_extract/META-INF/*.EC ]; then
+            CERT_FILE=$(find /tmp/apk_extract/META-INF -name "*.RSA" -o -name "*.DSA" -o -name "*.EC" | head -1)
+            if [ -n "$CERT_FILE" ]; then
+              echo "Certificate file: $CERT_FILE"
+              keytool -printcert -file "$CERT_FILE" 2>/dev/null | grep -E "(Owner:|Issuer:|SHA1:|SHA256:)" || echo "Could not extract certificate details"
+            fi
+          fi
+        else
+          echo "✗ ERROR: APK signature verification failed!"
+          cat apk_signature_info.txt
+          exit 1
+        fi
+        
+        # Verify keystore information
+        echo "\n=== Keystore Information ==="
+        if [ -f android/app/release.keystore ]; then
+          echo "Keystore file: android/app/release.keystore"
+          echo "Keystore size: $(du -sh android/app/release.keystore | awk '{print $1}')"
+          echo "Keystore MD5: $(md5 -q android/app/release.keystore 2>/dev/null || md5sum android/app/release.keystore | awk '{print $1}')"
+          
+          # List aliases in keystore (if password is available)
+          KEYSTORE_PASS="${{ secrets.ANDROID_STORE_PASSWORD || 'android' }}"
+          if keytool -list -v -keystore android/app/release.keystore -storepass "$KEYSTORE_PASS" 2>/dev/null | head -30; then
+            echo "\n✓ Keystore is accessible and contains certificates"
+          else
+            echo "WARNING: Could not list keystore contents (password might be incorrect)"
+          fi
+        fi
+
+    - name: Create Download HTML
+      run: |
+        echo "<html>" > download.html
+        echo "<body>" >> download.html
+        echo "<h1>App Downloads</h1>" >> download.html
+        echo "<p>Click below to download the latest versions:</p>" >> download.html
+        echo "<h2>Android</h2>" >> download.html
+        echo "<a href='app-release.apk' download>Download APK</a>" >> download.html
+        echo "<h2>iOS</h2>" >> download.html
+        echo "<a href='AwesomeProject.app' download>Download iOS App</a>" >> download.html
+        echo "</body>" >> download.html
+        echo "</html>" >> download.html
+
+    - name: Install SSH client and sshpass
+      run: |
+        brew install openssh
+        brew install hudochenkov/sshpass/sshpass
+
+    - name: Debug and check GitHub Secrets
+      run: |
+        echo "Debug: Checking GitHub Secrets..."
+        echo "SERVER_HOST exists: ${{ secrets.SERVER_HOST != '' }}"
+        echo "SERVER_USERNAME exists: ${{ secrets.SERVER_USERNAME != '' }}"
+        echo "SERVER_PASSWORD exists: ${{ secrets.SERVER_PASSWORD != '' }}"
+        
+        # Check if all required secrets are set
+        if [ -z "${{ secrets.SERVER_HOST }}" ] || [ -z "${{ secrets.SERVER_USERNAME }}" ] || [ -z "${{ secrets.SERVER_PASSWORD }}" ]; then
+          echo "ERROR: Missing required GitHub Secrets!"
+          echo "Please check that SERVER_HOST, SERVER_USERNAME, and SERVER_PASSWORD are set in repository Secrets."
+          exit 1
+        fi
+
+    - name: Add server to known_hosts
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        echo "Attempting to add server to known_hosts..."
+        # Try to add the server's host key, with timeout and error handling
+        if ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1; then
+          echo "Successfully added server to known_hosts"
+        else
+          echo "Warning: ssh-keyscan failed, but continuing..."
+          echo "This might be okay if the server uses password authentication only"
+        fi
+        
+        chmod 600 ~/.ssh/known_hosts
+        
+        # Verify the known_hosts file
+        if [ -f ~/.ssh/known_hosts ]; then
+          echo "known_hosts file exists"
+          cat ~/.ssh/known_hosts | grep -q "${{ secrets.SERVER_HOST }}" && echo "Server found in known_hosts" || echo "Server not found in known_hosts (may still work)"
+        fi
+
+    - name: Create SSH config
+      run: |
+        echo "Host upload-server"
+        echo "  HostName ${{ secrets.SERVER_HOST }}"
+        echo "  User ${{ secrets.SERVER_USERNAME }}"
+        echo "  PasswordAuthentication yes"
+        echo "  StrictHostKeyChecking no"
+        echo "  UserKnownHostsFile ~/.ssh/known_hosts" > ~/.ssh/config
+        chmod 600 ~/.ssh/config
+
+    - name: Upload APK and HTML to Server (Optimized)
+      run: |
+        # Optimize SCP with faster encryption, compression, and single connection
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C app-release.apk download.html ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
+
+    - name: Verify Files on Server (Direct SSH)
+      run: |
+        # Use sshpass and ssh directly to run commands on server
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        echo "=== Checking /var/www/html directory contents ==="
+        ls -la /var/www/html
+        
+        echo "\n=== Fixing APK file location if needed ==="
+        if [ -f /var/www/html/app-release.apk ]; then
+          echo "APK file is already in correct location: /var/www/html/app-release.apk"
+        else
+          echo "ERROR: APK file not found!"
+        fi
+        
+        echo "\n=== Checking file permissions ==="
+        ls -lh /var/www/html/*.apk 2>/dev/null || echo "No APK files found"
+        ls -lh /var/www/html/download.html 2>/dev/null || echo "No HTML file found"
+        
+        echo "\n=== Setting proper permissions ==="
+        chmod 644 /var/www/html/app-release.apk 2>/dev/null
+        chmod 644 /var/www/html/download.html 2>/dev/null
+        
+        echo "\n=== Final directory contents ==="
+        ls -la /var/www/html
+        EOF
+
+
+
+  build-ios:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.1.5'
+        bundler-cache: true
+        working-directory: ./fastlane
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+    
+    - name: Install dependencies
+      run: pnpm install
+    
+    - name: Install CocoaPods dependencies
+      working-directory: ./ios
+      run: |
+        pod install
+    
+    - name: Build iOS app
+      working-directory: ./fastlane
+      run: bundle exec fastlane ios build
+    
+    - name: Check Generated iOS App
+      run: |
+        echo "=== Looking for generated iOS app files ==="
+        find . -name "AwesomeProject.app" -type d | sort
+        
+        echo "\n=== Checking ios/build/Build/Products/Release-iphoneos directory ==="
+        ls -la ios/build/Build/Products/Release-iphoneos 2>/dev/null || echo "Release directory not found"
+        
+        echo "=== Verifying iOS app exists ==="
+        if [ -d "ios/build/Build/Products/Release-iphoneos/AwesomeProject.app" ]; then
+          echo "iOS app found at: ios/build/Build/Products/Release-iphoneos/AwesomeProject.app"
+          echo "iOS app size: $(du -sh ios/build/Build/Products/Release-iphoneos/AwesomeProject.app | awk '{print $1}')"
+          # Copy iOS app to root directory for simpler upload
+          cp -r ios/build/Build/Products/Release-iphoneos/AwesomeProject.app ./AwesomeProject.app
+          echo "iOS app copied to root directory: $(du -sh AwesomeProject.app | awk '{print $1}')"
+        else
+          echo "ERROR: iOS app not found!"
+          exit 1
+        fi
+
+    - name: Install SSH client and sshpass
+      run: |
+        brew install openssh
+        brew install hudochenkov/sshpass/sshpass
+
+    - name: Debug and check GitHub Secrets
+      run: |
+        echo "Debug: Checking GitHub Secrets..."
+        echo "SERVER_HOST exists: ${{ secrets.SERVER_HOST != '' }}"
+        echo "SERVER_USERNAME exists: ${{ secrets.SERVER_USERNAME != '' }}"
+        echo "SERVER_PASSWORD exists: ${{ secrets.SERVER_PASSWORD != '' }}"
+        
+        # Check if all required secrets are set
+        if [ -z "${{ secrets.SERVER_HOST }}" ] || [ -z "${{ secrets.SERVER_USERNAME }}" ] || [ -z "${{ secrets.SERVER_PASSWORD }}" ]; then
+          echo "ERROR: Missing required GitHub Secrets!"
+          echo "Please check that SERVER_HOST, SERVER_USERNAME, and SERVER_PASSWORD are set in repository Secrets."
+          exit 1
+        fi
+
+    - name: Add server to known_hosts
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        echo "Attempting to add server to known_hosts..."
+        # Try to add the server's host key, with timeout and error handling
+        if ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1; then
+          echo "Successfully added server to known_hosts"
+        else
+          echo "Warning: ssh-keyscan failed, but continuing..."
+          echo "This might be okay if the server uses password authentication only"
+        fi
+        
+        chmod 600 ~/.ssh/known_hosts
+        
+        # Verify the known_hosts file
+        if [ -f ~/.ssh/known_hosts ]; then
+          echo "known_hosts file exists"
+          cat ~/.ssh/known_hosts | grep -q "${{ secrets.SERVER_HOST }}" && echo "Server found in known_hosts" || echo "Server not found in known_hosts (may still work)"
+        fi
+
+    - name: Create SSH config
+      run: |
+        echo "Host upload-server"
+        echo "  HostName ${{ secrets.SERVER_HOST }}"
+        echo "  User ${{ secrets.SERVER_USERNAME }}"
+        echo "  PasswordAuthentication yes"
+        echo "  StrictHostKeyChecking no"
+        echo "  UserKnownHostsFile ~/.ssh/known_hosts" > ~/.ssh/config
+        chmod 600 ~/.ssh/config
+
+    - name: Upload iOS App to Server (Optimized)
+      run: |
+        # Optimize SCP with faster encryption, compression for iOS app
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C -r AwesomeProject.app ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
+
+    - name: Verify iOS Files on Server (Direct SSH)
+      run: |
+        # Use sshpass and ssh directly to run commands on server
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        echo "=== Checking iOS app on server ==="
+        if [ -d /var/www/html/AwesomeProject.app ]; then
+          echo "iOS app is in correct location: /var/www/html/AwesomeProject.app"
+          echo "iOS app size: $(du -sh /var/www/html/AwesomeProject.app | awk '{print $1}')"
+        else
+          echo "ERROR: iOS app not found!"
+        fi
+        
+        echo "\n=== Setting proper permissions for iOS app ==="
+        chmod -R 755 /var/www/html/AwesomeProject.app 2>/dev/null
+        
+        echo "\n=== Final directory contents ==="
+        ls -la /var/www/html
+        EOF
+
