@@ -153,7 +153,6 @@ jobs:
         ls -la android/ 2>/dev/null || true
         ls -la android/app/ 2>/dev/null || true
 
-    
     - name: Build Android APK
       working-directory: ./fastlane
       env:
@@ -354,7 +353,6 @@ jobs:
         bundler-cache: true
         working-directory: ./fastlane
     
-    # ========== 新增：修复 Bundler 平台不匹配问题 ==========
     - name: Fix Bundler platform mismatch (关键修复步骤)
       working-directory: ./fastlane
       run: |
@@ -364,6 +362,8 @@ jobs:
         bundle install
         # 更新 fastlane 到最新版本（解决版本兼容问题）
         bundle update fastlane
+        # 全局安装 CocoaPods 作为兜底方案
+        gem install cocoapods -v 1.15.2 --no-document
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2
@@ -386,15 +386,20 @@ jobs:
         rm -rf Pods Podfile.lock
         pod cache clean --all || true
     
-    - name: Install CocoaPods dependencies
+    - name: Install CocoaPods dependencies (修复版本)
       working-directory: ./ios
       env:
         # Fix for pnpm workspace + CocoaPods compatibility
         COCOAPODS_DISABLE_STATS: true
+        # 指定 Bundler 从 fastlane 目录加载 Gemfile
+        BUNDLE_GEMFILE: ../fastlane/Gemfile
       run: |
-        # 使用 bundle exec 执行 pod，避免 Ruby 环境冲突
+        # 使用绝对路径确保 Node 模块可被找到
         export NODE_PATH=$(pwd)/../node_modules
-        bundle exec pod install --repo-update
+        # 优先使用 fastlane 目录的 Bundler 执行 pod
+        bundle exec pod install --repo-update || \
+        # 兜底方案：直接使用全局安装的 pod
+        pod install --repo-update
     
     - name: Build iOS app
       working-directory: ./fastlane
