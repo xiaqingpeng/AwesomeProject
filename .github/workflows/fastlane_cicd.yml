@@ -356,6 +356,9 @@ jobs:
     - name: Fix Bundler platform mismatch + Install CocoaPods (关键修复)
       working-directory: ./fastlane
       run: |
+        # 确保基础命令可用
+        export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+        
         # 添加缺失的平台到 Gemfile.lock
         bundle lock --add-platform arm64-darwin-24
         # 重新安装依赖以适配新平台
@@ -366,15 +369,28 @@ jobs:
         bundle update fastlane
         # 全局安装 CocoaPods 作为终极兜底
         sudo gem install cocoapods -v 1.15.2 --no-document
-        # 验证 CocoaPods 安装路径
+        
+        # 验证 CocoaPods 安装
         echo "=== CocoaPods 安装验证 ==="
-        which pod
-        pod --version
-        /usr/local/bin/pod --version
-        # 将全局 gem 路径加入环境变量
+        if command -v pod >/dev/null; then
+          echo "pod command found at: $(command -v pod)"
+          pod --version
+        else
+          echo "pod command not found, trying global gem path"
+          export PATH="$(gem environment home)/bin:$PATH"
+          if command -v pod >/dev/null; then
+            echo "pod command found at: $(command -v pod)"
+            pod --version
+          else
+            echo "ERROR: CocoaPods not installed correctly!"
+            exit 1
+          fi
+        fi
+        
+        # 设置环境变量
         echo "GEM_HOME=$(gem environment home)" >> $GITHUB_ENV
         echo "$(gem environment home)/bin" >> $GITHUB_PATH
-        echo "/usr/local/bin" >> $GITHUB_PATH
+        echo "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" >> $GITHUB_PATH
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2
@@ -388,14 +404,19 @@ jobs:
         cache: 'pnpm'
     
     - name: Install dependencies
-      run: pnpm install
+      run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        pnpm install
     
     - name: Clean CocoaPods cache
       working-directory: ./ios
       run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:$PATH"
         # Clean CocoaPods cache to avoid null byte errors
         rm -rf Pods Podfile.lock
-        pod cache clean --all || true
+        if command -v pod >/dev/null; then
+          pod cache clean --all || true
+        fi
     
     - name: Pre-install CocoaPods dependencies (CI 层面)
       working-directory: ./ios
@@ -403,25 +424,29 @@ jobs:
         # 强制使用全局 Gemfile 上下文
         BUNDLE_GEMFILE: /dev/null
       run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:$PATH"
         # 使用绝对路径执行 pod，避开 Bundler 隔离
         export NODE_PATH=$(pwd)/../node_modules
-        /usr/local/bin/pod install --repo-update
+        if command -v pod >/dev/null; then
+          pod install --repo-update
+        else
+          echo "ERROR: pod command not found!"
+          exit 1
+        fi
     
     - name: Build iOS app
       working-directory: ./fastlane
       env:
         # 确保 fastlane 能找到全局 pod
-        PATH: "/usr/local/bin:${PATH}"
+        PATH: "/opt/homebrew/bin:/usr/local/bin:$(gem environment home)/bin:/usr/bin:/bin:$PATH"
         BUNDLE_GEMFILE: /dev/null
       run: |
-        # 验证 pod 路径
-        which pod
-        pod --version
-        # 执行 fastlane
+        # 执行 fastlane（移除不必要的验证命令）
         bundle exec fastlane ios build
     
     - name: Check Generated iOS App
       run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         echo "=== Looking for generated iOS app files ==="
         find . -name "AwesomeProject.app" -type d | sort
         
@@ -442,8 +467,9 @@ jobs:
 
     - name: Install SSH client and sshpass
       run: |
-        brew install openssh
-        brew install hudochenkov/sshpass/sshpass
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        brew install openssh || true
+        brew install hudochenkov/sshpass/sshpass || true
 
     - name: Debug and check GitHub Secrets
       run: |
@@ -465,12 +491,11 @@ jobs:
         chmod 700 ~/.ssh
         
         echo "Attempting to add server to known_hosts..."
-        # Try to add the server's host key, with timeout and error handling
-        if ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1; then
-          echo "Successfully added server to known_hosts"
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        if command -v ssh-keyscan >/dev/null; then
+          ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1 || echo "Warning: ssh-keyscan failed, but continuing..."
         else
-          echo "Warning: ssh-keyscan failed, but continuing..."
-          echo "This might be okay if the server uses password authentication only"
+          echo "Warning: ssh-keyscan not found, skipping known_hosts setup"
         fi
         
         chmod 600 ~/.ssh/known_hosts
@@ -478,7 +503,9 @@ jobs:
         # Verify the known_hosts file
         if [ -f ~/.ssh/known_hosts ]; then
           echo "known_hosts file exists"
-          cat ~/.ssh/known_hosts | grep -q "${{ secrets.SERVER_HOST }}" && echo "Server found in known_hosts" || echo "Server not found in known_hosts (may still work)"
+          if command -v grep >/dev/null; then
+            grep -q "${{ secrets.SERVER_HOST }}" ~/.ssh/known_hosts && echo "Server found in known_hosts" || echo "Server not found in known_hosts (may still work)"
+          fi
         fi
 
     - name: Create SSH config
@@ -493,11 +520,13 @@ jobs:
 
     - name: Upload iOS App to Server (Optimized)
       run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         # Optimize SCP with faster encryption, compression for iOS app
         sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C -r AwesomeProject.app ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
 
     - name: Verify iOS Files on Server (Direct SSH)
       run: |
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         # Use sshpass and ssh directly to run commands on server
         sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
         echo "=== Checking iOS app on server ==="
