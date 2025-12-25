@@ -340,14 +340,14 @@ jobs:
         ls -la /var/www/html
         EOF
 
-        
+
   build-ios:
     runs-on: macos-latest
     
     steps:
     - uses: actions/checkout@v3
     
-    # 关键：关闭自动 bundler cache，避免提前执行 bundle install 报错
+    # 关闭自动 bundler cache，避免提前执行 bundle install 报错
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
@@ -371,7 +371,7 @@ jobs:
         gem install bundler:2.3.27 --no-document
         bundler --version
         
-        # 2. 修复平台配置（核心解决 exit code 16 问题）
+        # 2. 修复平台配置
         echo "=== 修复 Bundler 平台配置 ==="
         bundle _2.3.27_ lock --add-platform ruby
         bundle _2.3.27_ lock --add-platform arm64-darwin-24
@@ -382,7 +382,7 @@ jobs:
         echo "=== 当前 Gemfile.lock 平台 ==="
         cat Gemfile.lock | grep -A 10 "PLATFORMS"
         
-        # 3. 手动安装依赖（此时平台已修复，不会报错）
+        # 3. 手动安装依赖
         echo "=== 安装项目依赖 ==="
         bundle _2.3.27_ install --jobs 3
     
@@ -452,8 +452,7 @@ jobs:
     
     - name: Pre-install CocoaPods dependencies (CI 层面)
       working-directory: ./ios
-      env:
-        BUNDLE_GEMFILE: /dev/null
+      # 移除这里的 BUNDLE_GEMFILE: /dev/null
       run: |
         export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         export NODE_PATH=$(pwd)/../node_modules
@@ -464,15 +463,30 @@ jobs:
           exit 1
         fi
     
+    # 核心修复的 Build iOS app 步骤
     - name: Build iOS app
       working-directory: ./fastlane
       env:
+        # 移除 BUNDLE_GEMFILE: /dev/null，强制锁定 Ruby 3.1.5
         PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-        BUNDLE_GEMFILE: /dev/null
+        GEM_HOME: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
+        GEM_PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
+        RUBY_VERSION: "3.1.5"
       run: |
+        # 强制刷新 Ruby 环境，防止回退到系统 Ruby
+        source ~/.bashrc || true
+        source ~/.zshrc || true
+        
+        # 验证最终环境
+        echo "=== 最终环境验证 ==="
+        which ruby
         ruby --version
+        which bundle
         bundle --version
-        bundle exec fastlane ios build
+        echo "Gemfile 路径: $(pwd)/Gemfile"
+        
+        # 显式指定 Gemfile 路径执行 fastlane
+        bundle _2.3.27_ exec fastlane ios build --gemfile $(pwd)/Gemfile
     
     - name: Check Generated iOS App
       run: |
