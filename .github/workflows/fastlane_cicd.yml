@@ -339,23 +339,26 @@ jobs:
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
         EOF
+
+        
   build-ios:
     runs-on: macos-latest
     
     steps:
     - uses: actions/checkout@v3
     
+    # 关键：关闭自动 bundler cache，避免提前执行 bundle install 报错
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.1.5'
-        bundler-cache: true
+        bundler-cache: false
         working-directory: ./fastlane
       env:
         BUNDLE_FORCE_RUBY_PLATFORM: true
     
-    # 核心修复：在缓存恢复后立即修复平台问题
-    - name: Fix Bundler platform mismatch (Critical Fix)
+    # 手动处理 Bundler 平台修复 + 依赖安装
+    - name: Manual Bundler setup with platform fix (iOS)
       working-directory: ./fastlane
       run: |
         # 强制加载 Ruby 3.1.5 环境
@@ -363,56 +366,44 @@ jobs:
         export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
         export GEM_PATH="$GEM_HOME"
         
-        # 关键：添加缺失的平台（解决 exit code 16 错误）
+        # 1. 安装匹配版本的 Bundler
+        echo "=== 安装 Bundler 2.3.27 ==="
+        gem install bundler:2.3.27 --no-document
+        bundler --version
+        
+        # 2. 修复平台配置（核心解决 exit code 16 问题）
         echo "=== 修复 Bundler 平台配置 ==="
-        bundle lock --add-platform ruby
-        bundle lock --add-platform arm64-darwin-24
-        bundle lock --add-platform arm64-darwin-23
-        bundle lock --add-platform arm64-darwin-22
+        bundle _2.3.27_ lock --add-platform ruby
+        bundle _2.3.27_ lock --add-platform arm64-darwin-24
+        bundle _2.3.27_ lock --add-platform arm64-darwin-23
+        bundle _2.3.27_ lock --add-platform arm64-darwin-22
         
         # 验证平台配置
         echo "=== 当前 Gemfile.lock 平台 ==="
         cat Gemfile.lock | grep -A 10 "PLATFORMS"
         
-        # 重新安装以应用平台配置
-        bundle install
+        # 3. 手动安装依赖（此时平台已修复，不会报错）
+        echo "=== 安装项目依赖 ==="
+        bundle _2.3.27_ install --jobs 3
     
-    - name: Fix Bundler version + Install CocoaPods (关键修复)
+    # 安装 CocoaPods 及其他依赖
+    - name: Install CocoaPods and dependencies
       working-directory: ./fastlane
       run: |
-        # 1. 强制加载 Ruby 3.1.5 环境
-        source ~/.bash_profile || true
-        source ~/.profile || true
         export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
         export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
         export GEM_PATH="$GEM_HOME"
         
-        # 验证 Ruby 版本
-        echo "=== Ruby 环境验证 ==="
-        ruby --version
-        gem --version
-        which ruby
-        which gem
-        
-        # 2. 安装匹配版本的 Bundler
-        echo "=== 安装匹配版本的 Bundler ==="
-        gem install bundler:2.3.27 --no-document
-        bundler --version
-        
-        # 3. 重新安装依赖并添加 CocoaPods
-        echo "=== 安装项目依赖 ==="
-        bundle _2.3.27_ install
-        
-        # 4. 添加 CocoaPods 到项目依赖
+        # 添加 CocoaPods 到项目依赖
         echo "=== 添加 CocoaPods 依赖 ==="
         bundle _2.3.27_ add cocoapods -v 1.15.2
         bundle _2.3.27_ update fastlane
         
-        # 5. 全局安装 CocoaPods（兜底）
+        # 全局安装 CocoaPods（兜底）
         echo "=== 全局安装 CocoaPods ==="
         gem install cocoapods -v 1.15.2 --no-document
         
-        # 6. 验证 CocoaPods 安装
+        # 验证 CocoaPods 安装
         echo "=== CocoaPods 安装验证 ==="
         if command -v pod >/dev/null; then
           echo "pod command found at: $(command -v pod)"
@@ -428,7 +419,7 @@ jobs:
           fi
         fi
         
-        # 7. 设置环境变量供后续步骤使用
+        # 设置环境变量供后续步骤使用
         echo "GEM_HOME=$GEM_HOME" >> $GITHUB_ENV
         echo "$GEM_HOME/bin" >> $GITHUB_PATH
         echo "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin" >> $GITHUB_PATH
@@ -454,7 +445,6 @@ jobs:
       working-directory: ./ios
       run: |
         export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-        # Clean CocoaPods cache to avoid null byte errors
         rm -rf Pods Podfile.lock
         if command -v pod >/dev/null; then
           pod cache clean --all || true
@@ -463,11 +453,9 @@ jobs:
     - name: Pre-install CocoaPods dependencies (CI 层面)
       working-directory: ./ios
       env:
-        # 强制使用全局 Gemfile 上下文
         BUNDLE_GEMFILE: /dev/null
       run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-        # 使用绝对路径执行 pod避开 Bundler 隔离
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         export NODE_PATH=$(pwd)/../node_modules
         if command -v pod >/dev/null; then
           pod install --repo-update
@@ -479,14 +467,11 @@ jobs:
     - name: Build iOS app
       working-directory: ./fastlane
       env:
-        # 确保 fastlane 能找到全局 pod
         PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
         BUNDLE_GEMFILE: /dev/null
       run: |
-        # 验证 Ruby 和 Bundler 版本
         ruby --version
         bundle --version
-        # 执行 fastlane
         bundle exec fastlane ios build
     
     - name: Check Generated iOS App
@@ -502,7 +487,6 @@ jobs:
         if [ -d "ios/build/Build/Products/Release-iphoneos/AwesomeProject.app" ]; then
           echo "iOS app found at: ios/build/Build/Products/Release-iphoneos/AwesomeProject.app"
           echo "iOS app size: $(du -sh ios/build/Build/Products/Release-iphoneos/AwesomeProject.app | awk '{print $1}')"
-          # Copy iOS app to root directory for simpler upload
           cp -r ios/build/Build/Products/Release-iphoneos/AwesomeProject.app ./AwesomeProject.app
           echo "iOS app copied to root directory: $(du -sh AwesomeProject.app | awk '{print $1}')"
         else
@@ -523,10 +507,8 @@ jobs:
         echo "SERVER_USERNAME exists: ${{ secrets.SERVER_USERNAME != '' }}"
         echo "SERVER_PASSWORD exists: ${{ secrets.SERVER_PASSWORD != '' }}"
         
-        # Check if all required secrets are set
         if [ -z "${{ secrets.SERVER_HOST }}" ] || [ -z "${{ secrets.SERVER_USERNAME }}" ] || [ -z "${{ secrets.SERVER_PASSWORD }}" ]; then
           echo "ERROR: Missing required GitHub Secrets!"
-          echo "Please check that SERVER_HOST, SERVER_USERNAME, and SERVER_PASSWORD are set in repository Secrets."
           exit 1
         fi
 
@@ -539,18 +521,12 @@ jobs:
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         if command -v ssh-keyscan >/dev/null; then
           ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1 || echo "Warning: ssh-keyscan failed, but continuing..."
-        else
-          echo "Warning: ssh-keyscan not found, skipping known_hosts setup"
         fi
         
         chmod 600 ~/.ssh/known_hosts
         
-        # Verify the known_hosts file
-        if [ -f ~/.ssh/known_hosts ]; then
-          echo "known_hosts file exists"
-          if command -v grep >/dev/null; then
-            grep -q "${{ secrets.SERVER_HOST }}" ~/.ssh/known_hosts && echo "Server found in known_hosts" || echo "Server not found in known_hosts (may still work)"
-          fi
+        if [ -f ~/.ssh/known_hosts ] && command -v grep >/dev/null; then
+          grep -q "${{ secrets.SERVER_HOST }}" ~/.ssh/known_hosts && echo "Server found in known_hosts" || echo "Server not found in known_hosts"
         fi
 
     - name: Create SSH config
@@ -566,13 +542,11 @@ jobs:
     - name: Upload iOS App to Server (Optimized)
       run: |
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        # Optimize SCP with faster encryption, compression for iOS app
         sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C -r AwesomeProject.app ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
 
     - name: Verify iOS Files on Server (Direct SSH)
       run: |
         export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        # Use sshpass and ssh directly to run commands on server
         sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
         echo "=== Checking iOS app on server ==="
         if [ -d /var/www/html/AwesomeProject.app ]; then
@@ -588,4 +562,3 @@ jobs:
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
         EOF
-   
