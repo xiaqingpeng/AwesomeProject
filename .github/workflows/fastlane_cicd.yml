@@ -452,7 +452,6 @@ jobs:
     
     - name: Pre-install CocoaPods dependencies (CI 层面)
       working-directory: ./ios
-      # 移除这里的 BUNDLE_GEMFILE: /dev/null
       run: |
         export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         export NODE_PATH=$(pwd)/../node_modules
@@ -467,15 +466,14 @@ jobs:
     - name: Build iOS app
       working-directory: ./fastlane
       env:
-        # 移除 BUNDLE_GEMFILE: /dev/null，强制锁定 Ruby 3.1.5
         PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
         GEM_HOME: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
         GEM_PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
         RUBY_VERSION: "3.1.5"
       run: |
-        # 强制刷新 Ruby 环境，防止回退到系统 Ruby
-        source ~/.bashrc || true
-        source ~/.zshrc || true
+        # 修复：先检查文件是否存在，再执行 source，避免报错
+        [ -f ~/.bashrc ] && source ~/.bashrc || true
+        [ -f ~/.zshrc ] && source ~/.zshrc || true
         
         # 验证最终环境
         echo "=== 最终环境验证 ==="
