@@ -339,11 +339,10 @@ jobs:
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
         EOF
-
-  build-ios:  # 修复：与 build-android 同级缩进
+  build-ios:
     runs-on: macos-latest
     
-    steps:  # 修复：正确缩进
+    steps:
     - uses: actions/checkout@v3
     
     - name: Set up Ruby
@@ -352,14 +351,36 @@ jobs:
         ruby-version: '3.1.5'
         bundler-cache: true
         working-directory: ./fastlane
-      # 强制使用指定 Ruby 版本，禁用系统 Ruby
       env:
         BUNDLE_FORCE_RUBY_PLATFORM: true
     
-    - name: Fix Bundler platform mismatch + Install CocoaPods (关键修复)
+    # 核心修复：在缓存恢复后立即修复平台问题
+    - name: Fix Bundler platform mismatch (Critical Fix)
       working-directory: ./fastlane
       run: |
-        # 1. 强制加载 Ruby 3.1.5 环境（核心修复）
+        # 强制加载 Ruby 3.1.5 环境
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
+        export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
+        export GEM_PATH="$GEM_HOME"
+        
+        # 关键：添加缺失的平台（解决 exit code 16 错误）
+        echo "=== 修复 Bundler 平台配置 ==="
+        bundle lock --add-platform ruby
+        bundle lock --add-platform arm64-darwin-24
+        bundle lock --add-platform arm64-darwin-23
+        bundle lock --add-platform arm64-darwin-22
+        
+        # 验证平台配置
+        echo "=== 当前 Gemfile.lock 平台 ==="
+        cat Gemfile.lock | grep -A 10 "PLATFORMS"
+        
+        # 重新安装以应用平台配置
+        bundle install
+    
+    - name: Fix Bundler version + Install CocoaPods (关键修复)
+      working-directory: ./fastlane
+      run: |
+        # 1. 强制加载 Ruby 3.1.5 环境
         source ~/.bash_profile || true
         source ~/.profile || true
         export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
@@ -380,7 +401,6 @@ jobs:
         
         # 3. 重新安装依赖并添加 CocoaPods
         echo "=== 安装项目依赖 ==="
-        bundle _2.3.27_ lock --add-platform arm64-darwin-24
         bundle _2.3.27_ install
         
         # 4. 添加 CocoaPods 到项目依赖
@@ -388,7 +408,7 @@ jobs:
         bundle _2.3.27_ add cocoapods -v 1.15.2
         bundle _2.3.27_ update fastlane
         
-        # 5. 全局安装 CocoaPods兜底
+        # 5. 全局安装 CocoaPods（兜底）
         echo "=== 全局安装 CocoaPods ==="
         gem install cocoapods -v 1.15.2 --no-document
         
@@ -446,8 +466,8 @@ jobs:
         # 强制使用全局 Gemfile 上下文
         BUNDLE_GEMFILE: /dev/null
       run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-        # 使用绝对路径执行 pod，避开 Bundler 隔离
+        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+        # 使用绝对路径执行 pod避开 Bundler 隔离
         export NODE_PATH=$(pwd)/../node_modules
         if command -v pod >/dev/null; then
           pod install --repo-update
@@ -568,3 +588,4 @@ jobs:
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
         EOF
+   
