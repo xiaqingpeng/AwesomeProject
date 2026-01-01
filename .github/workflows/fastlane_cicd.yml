@@ -309,32 +309,53 @@ jobs:
         echo "  UserKnownHostsFile ~/.ssh/known_hosts" >> ~/.ssh/config
         chmod 600 ~/.ssh/config
 
-    - name: Upload APK and HTML to Server (Optimized)
+    - name: Upload APK and HTML to Server
       run: |
-        # Optimize SCP with faster encryption, compression, and single connection
-        sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C app-release.apk download.html ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
+        echo "Testing SSH connection first..."
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} 'echo "SSH connection successful"'
+        
+        echo "Uploading files to server..."
+        # Upload files one by one with retry logic
+        for file in app-release.apk download.html; do
+          echo "Uploading $file..."
+          for attempt in 1 2 3; do
+            if sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -P 22 "$file" ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/; then
+              echo "✓ Successfully uploaded $file"
+              break
+            else
+              echo "✗ Upload attempt $attempt failed for $file"
+              if [ $attempt -eq 3 ]; then
+                echo "ERROR: Failed to upload $file after 3 attempts"
+                exit 1
+              fi
+              sleep 5
+            fi
+          done
+        done
 
-    - name: Verify Files on Server (Direct SSH)
+    - name: Verify Files on Server
       run: |
-        # Use sshpass and ssh directly to run commands on server
-        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
         echo "=== Checking /var/www/html directory contents ==="
         ls -la /var/www/html
         
-        echo "\n=== Fixing APK file location if needed ==="
+        echo "\n=== Verifying uploaded files ==="
         if [ -f /var/www/html/app-release.apk ]; then
-          echo "APK file is already in correct location: /var/www/html/app-release.apk"
+          echo "✓ APK file found: /var/www/html/app-release.apk"
+          echo "APK size: $(du -h /var/www/html/app-release.apk | awk '{print $1}')"
         else
-          echo "ERROR: APK file not found!"
+          echo "✗ ERROR: APK file not found!"
         fi
         
-        echo "\n=== Checking file permissions ==="
-        ls -lh /var/www/html/*.apk 2>/dev/null || echo "No APK files found"
-        ls -lh /var/www/html/download.html 2>/dev/null || echo "No HTML file found"
+        if [ -f /var/www/html/download.html ]; then
+          echo "✓ HTML file found: /var/www/html/download.html"
+        else
+          echo "✗ ERROR: HTML file not found!"
+        fi
         
         echo "\n=== Setting proper permissions ==="
-        chmod 644 /var/www/html/app-release.apk 2>/dev/null
-        chmod 644 /var/www/html/download.html 2>/dev/null
+        chmod 644 /var/www/html/app-release.apk 2>/dev/null || true
+        chmod 644 /var/www/html/download.html 2>/dev/null || true
         
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
@@ -347,83 +368,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    # 关闭自动 bundler cache，避免提前执行 bundle install 报错
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '3.1.5'
-        bundler-cache: false
+        ruby-version: '3.1'
+        bundler-cache: true
         working-directory: ./fastlane
-      env:
-        BUNDLE_FORCE_RUBY_PLATFORM: true
     
-    # 手动处理 Bundler 平台修复 + 依赖安装
-    - name: Manual Bundler setup with platform fix (iOS)
-      working-directory: ./fastlane
+    - name: Install CocoaPods
       run: |
-        # 强制加载 Ruby 3.1.5 环境
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
-        export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
-        export GEM_PATH="$GEM_HOME"
-        
-        # 1. 安装匹配版本的 Bundler
-        echo "=== 安装 Bundler 2.3.27 ==="
-        gem install bundler:2.3.27 --no-document
-        bundler --version
-        
-        # 2. 修复平台配置
-        echo "=== 修复 Bundler 平台配置 ==="
-        bundle _2.3.27_ lock --add-platform ruby
-        bundle _2.3.27_ lock --add-platform arm64-darwin-24
-        bundle _2.3.27_ lock --add-platform arm64-darwin-23
-        bundle _2.3.27_ lock --add-platform arm64-darwin-22
-        
-        # 验证平台配置
-        echo "=== 当前 Gemfile.lock 平台 ==="
-        cat Gemfile.lock | grep -A 10 "PLATFORMS"
-        
-        # 3. 手动安装依赖
-        echo "=== 安装项目依赖 ==="
-        bundle _2.3.27_ install --jobs 3
-    
-    # 安装 CocoaPods 及其他依赖
-    - name: Install CocoaPods and dependencies
-      working-directory: ./fastlane
-      run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:$PATH"
-        export GEM_HOME="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
-        export GEM_PATH="$GEM_HOME"
-        
-        # 添加 CocoaPods 到项目依赖
-        echo "=== 添加 CocoaPods 依赖 ==="
-        bundle _2.3.27_ add cocoapods -v 1.15.2
-        bundle _2.3.27_ update fastlane
-        
-        # 全局安装 CocoaPods（兜底）
-        echo "=== 全局安装 CocoaPods ==="
-        gem install cocoapods -v 1.15.2 --no-document
-        
-        # 验证 CocoaPods 安装
-        echo "=== CocoaPods 安装验证 ==="
-        if command -v pod >/dev/null; then
-          echo "pod command found at: $(command -v pod)"
-          pod --version
-        else
-          export PATH="$GEM_HOME/bin:$PATH"
-          if command -v pod >/dev/null; then
-            echo "pod command found at: $(command -v pod)"
-            pod --version
-          else
-            echo "ERROR: CocoaPods not installed correctly!"
-            exit 1
-          fi
-        fi
-        
-        # 设置环境变量供后续步骤使用
-        echo "GEM_HOME=$GEM_HOME" >> $GITHUB_ENV
-        echo "$GEM_HOME/bin" >> $GITHUB_PATH
-        echo "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin" >> $GITHUB_PATH
-        echo "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" >> $GITHUB_PATH
+        gem install cocoapods --no-document
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2
@@ -437,54 +391,21 @@ jobs:
         cache: 'pnpm'
     
     - name: Install dependencies
-      run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-        pnpm install
+      run: pnpm install
     
     - name: Clean CocoaPods cache
       working-directory: ./ios
       run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         rm -rf Pods Podfile.lock
-        if command -v pod >/dev/null; then
-          pod cache clean --all || true
-        fi
+        pod cache clean --all || true
     
-    - name: Pre-install CocoaPods dependencies (CI 层面)
+    - name: Install CocoaPods dependencies
       working-directory: ./ios
-      run: |
-        export PATH="/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-        export NODE_PATH=$(pwd)/../node_modules
-        if command -v pod >/dev/null; then
-          pod install --repo-update
-        else
-          echo "ERROR: pod command not found!"
-          exit 1
-        fi
+      run: pod install --repo-update
     
-    # 核心修复的 Build iOS app 步骤
     - name: Build iOS app
       working-directory: ./fastlane
-      env:
-        PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/bin:${{ env.GEM_HOME }}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-        GEM_HOME: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
-        GEM_PATH: "/Users/runner/hostedtoolcache/Ruby/3.1.5/arm64/lib/ruby/gems/3.1.0"
-        RUBY_VERSION: "3.1.5"
-      run: |
-        # 修复：先检查文件是否存在，再执行 source，避免报错
-        [ -f ~/.bashrc ] && source ~/.bashrc || true
-        [ -f ~/.zshrc ] && source ~/.zshrc || true
-        
-        # 验证最终环境
-        echo "=== 最终环境验证 ==="
-        which ruby
-        ruby --version
-        which bundle
-        bundle --version
-        echo "Gemfile 路径: $(pwd)/Gemfile"
-        
-        # 显式指定 Gemfile 路径执行 fastlane
-        bundle _2.3.27_ exec fastlane ios build --gemfile $(pwd)/Gemfile
+      run: bundle exec fastlane ios build
     
     - name: Check Generated iOS App
       run: |
@@ -508,7 +429,6 @@ jobs:
 
     - name: Install SSH client and sshpass
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
         brew install openssh || true
         brew install hudochenkov/sshpass/sshpass || true
 
@@ -530,14 +450,15 @@ jobs:
         chmod 700 ~/.ssh
         
         echo "Attempting to add server to known_hosts..."
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        if command -v ssh-keyscan >/dev/null; then
-          ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1 || echo "Warning: ssh-keyscan failed, but continuing..."
+        if ssh-keyscan -H -p 22 -T 10 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>&1; then
+          echo "Successfully added server to known_hosts"
+        else
+          echo "Warning: ssh-keyscan failed, but continuing..."
         fi
         
         chmod 600 ~/.ssh/known_hosts
         
-        if [ -f ~/.ssh/known_hosts ] && command -v grep >/dev/null; then
+        if [ -f ~/.ssh/known_hosts ]; then
           grep -q "${{ secrets.SERVER_HOST }}" ~/.ssh/known_hosts && echo "Server found in known_hosts" || echo "Server not found in known_hosts"
         fi
 
@@ -551,25 +472,39 @@ jobs:
         echo "  UserKnownHostsFile ~/.ssh/known_hosts" >> ~/.ssh/config
         chmod 600 ~/.ssh/config
 
-    - name: Upload iOS App to Server (Optimized)
+    - name: Upload iOS App to Server
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -P 22 -c aes128-gcm@openssh.com -C -r AwesomeProject.app ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/
+        echo "Testing SSH connection first..."
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} 'echo "SSH connection successful"'
+        
+        echo "Uploading iOS app to server..."
+        for attempt in 1 2 3; do
+          if sshpass -p '${{ secrets.SERVER_PASSWORD }}' scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -P 22 -r AwesomeProject.app ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/var/www/html/; then
+            echo "✓ Successfully uploaded iOS app"
+            break
+          else
+            echo "✗ Upload attempt $attempt failed for iOS app"
+            if [ $attempt -eq 3 ]; then
+              echo "ERROR: Failed to upload iOS app after 3 attempts"
+              exit 1
+            fi
+            sleep 5
+          fi
+        done
 
-    - name: Verify iOS Files on Server (Direct SSH)
+    - name: Verify iOS Files on Server
       run: |
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        sshpass -p '${{ secrets.SERVER_PASSWORD }}' ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} << 'EOF'
         echo "=== Checking iOS app on server ==="
         if [ -d /var/www/html/AwesomeProject.app ]; then
-          echo "iOS app is in correct location: /var/www/html/AwesomeProject.app"
+          echo "✓ iOS app found: /var/www/html/AwesomeProject.app"
           echo "iOS app size: $(du -sh /var/www/html/AwesomeProject.app | awk '{print $1}')"
         else
-          echo "ERROR: iOS app not found!"
+          echo "✗ ERROR: iOS app not found!"
         fi
         
         echo "\n=== Setting proper permissions for iOS app ==="
-        chmod -R 755 /var/www/html/AwesomeProject.app 2>/dev/null
+        chmod -R 755 /var/www/html/AwesomeProject.app 2>/dev/null || true
         
         echo "\n=== Final directory contents ==="
         ls -la /var/www/html
