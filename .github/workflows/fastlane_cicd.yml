@@ -20,6 +20,11 @@ jobs:
         bundler-cache: true
         working-directory: ./fastlane
     
+    - name: Install Ruby dependencies
+      working-directory: ./fastlane
+      run: |
+        bundle install
+    
     - name: Install pnpm
       uses: pnpm/action-setup@v2
       with:
@@ -371,13 +376,14 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '3.1'
+        ruby-version: '3.1.5'
         bundler-cache: true
         working-directory: ./fastlane
     
-    - name: Install CocoaPods
+    - name: Install Ruby dependencies
+      working-directory: ./fastlane
       run: |
-        gem install cocoapods --no-document
+        bundle install
     
     - name: Install pnpm
       uses: pnpm/action-setup@v2

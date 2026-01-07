@@ -58,7 +58,9 @@ platform :ios do
     
     # Install CocoaPods dependencies first
     puts "Installing CocoaPods dependencies..."
-    sh("cd #{project_root}/ios && pod install --repo-update")
+    # Use bundle exec with the fastlane Gemfile to ensure we use the correct CocoaPods version
+    fastlane_gemfile = File.join(__dir__, 'Gemfile')
+    sh("cd #{project_root}/ios && BUNDLE_GEMFILE=#{fastlane_gemfile} bundle exec pod install --repo-update")
     
     # Build React Native iOS app using xcodebuild
     # This will automatically build the JS bundle and native app
