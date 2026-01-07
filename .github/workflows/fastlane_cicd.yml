@@ -88,8 +88,8 @@ jobs:
           echo "storePassword=$KEYSTORE_PASS" > android/key.properties
           echo "keyPassword=$KEY_PASS" >> android/key.properties
           echo "keyAlias=$KEY_ALIAS" >> android/key.properties
-          echo "storeFile=release.keystore" >> android/key.properties
-          
+        echo "storeFile=release.keystore" >> android/key.properties
+        
           echo "✓ Release keystore configured successfully"
           echo "Contents (passwords masked):"
           sed 's/Password=.*/Password=***/' android/key.properties
@@ -157,7 +157,7 @@ jobs:
         echo "\nVerifying created files..."
         ls -la android/ 2>/dev/null || true
         ls -la android/app/ 2>/dev/null || true
-
+    
     - name: Build Android APK
       working-directory: ./fastlane
       env:
